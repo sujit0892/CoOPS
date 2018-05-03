@@ -31,7 +31,9 @@ ASWeapon::ASWeapon()
 
 	RateOfFire = 600;
  	// Set this actor to call Tick() every frame.  You can turn this off to improve performance if you don't need it.
-	PrimaryActorTick.bCanEverTick = true;
+	SetReplicates(true);
+	NetUpdateFrequency = 66.0f;
+	MinNetUpdateFrequency = 33.0f;
 
 }
 
@@ -52,9 +54,13 @@ void ASWeapon::Tick(float DeltaTime)
 
 void ASWeapon::Fire()
 {
-	// Trace the world, from pawn eyes to crosshair location
-
 	
+
+	if (Role < ROLE_Authority)
+	{
+		ServerFire();
+		
+	}
 
 	AActor* MyOwner = GetOwner();
 	if (MyOwner)
@@ -106,6 +112,12 @@ void ASWeapon::Fire()
 
 		PlayFireEffects(TracerEndPoint);
 
+		if (Role == ROLE_Authority)
+		{
+			HitScamnTrace.TraceEnd = TracerEndPoint;
+			HitScamnTrace.PhysicalSurface = SurfaceType;
+		}
+
 		
 
 		LastFireTime = GetWorld()->TimeSeconds;
@@ -123,6 +135,12 @@ void ASWeapon::StartFire()
 void ASWeapon::StopFire()
 {
 	GetWorldTimerManager().ClearTimer(TimerHandle_TimeBetweenShots);
+}
+
+void ASWeapon::OnRep_HitTrace()
+{
+	PlayFireEffects(HitScamnTrace.TraceEnd);
+	PlayImpactEffects(HitScamnTrace.PhysicalSurface, HitScamnTrace.TraceEnd);
 }
 
 
@@ -156,6 +174,8 @@ void ASWeapon::PlayFireEffects(FVector TraceEnd)
 }
 
 
+
+
 void ASWeapon::PlayImpactEffects(EPhysicalSurface SurfaceType, FVector ImpactPoint)
 {
 	UParticleSystem* SelectedEffect = nullptr;
@@ -179,4 +199,22 @@ void ASWeapon::PlayImpactEffects(EPhysicalSurface SurfaceType, FVector ImpactPoi
 
 		UGameplayStatics::SpawnEmitterAtLocation(GetWorld(), SelectedEffect, ImpactPoint, ShotDirection.Rotation());
 	}
+}
+
+
+void ASWeapon::ServerFire_Implementation()
+{
+	Fire();
+}
+
+
+bool ASWeapon::ServerFire_Validate()
+{
+	return true;
+}
+
+void ASWeapon::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+	DOREPLIFETIME_CONDITION(ASWeapon, HitScamnTrace, COND_SkipOwner);
 }
